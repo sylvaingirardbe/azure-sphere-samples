@@ -1,0 +1,1 @@
+#define SCOPEID_LENGTH 20

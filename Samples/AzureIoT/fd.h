@@ -1,0 +1,1 @@
+void CloseFdAndPrintError(int fd, const char *fdName);
