@@ -46,7 +46,7 @@
 
 #include <hw/avnet_mt3620_sk.h>
 
-#include "deviceTwin.h"
+#include "device_twin.h"
 #include "build_options.h"
 #include "i2c.h"
 #include "lsm6dso_reg.h"
@@ -62,11 +62,7 @@ static axis3bit16_t data_raw_angular_rate;
 static axis3bit16_t raw_angular_rate_calibration;
 static axis1bit32_t data_raw_pressure;
 static axis1bit16_t data_raw_temperature;
-static float acceleration_mg[3];
-static float angular_rate_dps[3];
 static float lsm6dsoTemperature_degC;
-static float pressure_hPa;
-static float lps22hhTemperature_degC;
 
 static uint8_t whoamI, rst;
 //int accelTimerFd;
@@ -79,9 +75,6 @@ bool lps22hhDetected;
 //Extern variables
 int i2cFd = -1;
 extern int epollFd;
-extern volatile sig_atomic_t terminationRequired;
-
-EventLoopTimer *accelTimer = NULL;
 
 //Private functions
 
@@ -93,6 +86,11 @@ static int32_t platform_read(int *fD, uint8_t reg, uint8_t *bufp, uint16_t len);
 static int32_t lsm6dso_write_lps22hh_cx(void* ctx, uint8_t reg, uint8_t* data, uint16_t len);
 static int32_t lsm6dso_read_lps22hh_cx(void* ctx, uint8_t reg, uint8_t* data, uint16_t len);
 
+static xl_data xl_data_buffer;
+static ang_data ang_data_buffer;
+static temp_data temp_data_buffer;
+static press_data press_data_buffer;
+
 /// <summary>
 ///     Sleep for delayTime ms
 /// </summary>
@@ -103,26 +101,31 @@ void HAL_Delay(int delayTime) {
 	nanosleep(&ts, NULL);
 }
 
+xl_data getXlData() {
+	return xl_data_buffer;
+}
+
+ang_data getAngData() {
+	return ang_data_buffer;
+}
+
+temp_data getTempData() {
+	return temp_data_buffer;
+}
+
+press_data getPressData() {
+	return press_data_buffer;
+}
+
 /// <summary>
 ///     Print latest data from on-board sensors.
 /// </summary>
-void AccelTimerEventHandler(EventLoopTimer *eventData)
+int readSensorData()
 {
 	uint8_t reg;
 	lps22hh_reg_t lps22hhReg;
 
-#if (defined(IOT_CENTRAL_APPLICATION) || defined(IOT_HUB_APPLICATION))
-	static bool firstPass = true;
-#endif
-	// Consume the event.  If we don't do this we'll come right back 
-	// to process the same event again
-    if (ConsumeEventLoopTimerEvent(accelTimer) != 0) {
-		terminationRequired = true;
-        return;
-    }
-
 	// Read the sensors on the lsm6dso device
-
 	//Read output only if new xl value is available
 	lsm6dso_xl_flag_data_ready_get(&dev_ctx, &reg);
 	if (reg)
@@ -131,12 +134,12 @@ void AccelTimerEventHandler(EventLoopTimer *eventData)
 		memset(data_raw_acceleration.u8bit, 0x00, 3 * sizeof(int16_t));
 		lsm6dso_acceleration_raw_get(&dev_ctx, data_raw_acceleration.u8bit);
 
-		acceleration_mg[0] = lsm6dso_from_fs4_to_mg(data_raw_acceleration.i16bit[0]);
-		acceleration_mg[1] = lsm6dso_from_fs4_to_mg(data_raw_acceleration.i16bit[1]);
-		acceleration_mg[2] = lsm6dso_from_fs4_to_mg(data_raw_acceleration.i16bit[2]);
+		xl_data_buffer.x = lsm6dso_from_fs4_to_mg(data_raw_acceleration.i16bit[0]);
+		xl_data_buffer.y = lsm6dso_from_fs4_to_mg(data_raw_acceleration.i16bit[1]);
+		xl_data_buffer.z = lsm6dso_from_fs4_to_mg(data_raw_acceleration.i16bit[2]);
 
 		Log_Debug("\nLSM6DSO: Acceleration [mg]  : %.4lf, %.4lf, %.4lf\n",
-			acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
+			xl_data_buffer.x, xl_data_buffer.y, xl_data_buffer.z);
 	}
 
 	lsm6dso_gy_flag_data_ready_get(&dev_ctx, &reg);
@@ -147,12 +150,12 @@ void AccelTimerEventHandler(EventLoopTimer *eventData)
 		lsm6dso_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate.u8bit);
 
 		// Before we store the mdps values subtract the calibration data we captured at startup.
-		angular_rate_dps[0] = (lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[0] - raw_angular_rate_calibration.i16bit[0])) / 1000.0;
-		angular_rate_dps[1] = (lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[1] - raw_angular_rate_calibration.i16bit[1])) / 1000.0;
-		angular_rate_dps[2] = (lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[2] - raw_angular_rate_calibration.i16bit[2])) / 1000.0;
+		ang_data_buffer.x = (lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[0] - raw_angular_rate_calibration.i16bit[0])) / 1000.0;
+		ang_data_buffer.y = (lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[1] - raw_angular_rate_calibration.i16bit[1])) / 1000.0;
+		ang_data_buffer.z = (lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[2] - raw_angular_rate_calibration.i16bit[2])) / 1000.0;
 
 		Log_Debug("LSM6DSO: Angular rate [dps] : %4.2f, %4.2f, %4.2f\r\n",
-			angular_rate_dps[0], angular_rate_dps[1], angular_rate_dps[2]);
+			ang_data_buffer.x, ang_data_buffer.y, ang_data_buffer.z);
 
 	}
 
@@ -182,13 +185,13 @@ void AccelTimerEventHandler(EventLoopTimer *eventData)
 		{
 			lps22hh_pressure_raw_get(&pressure_ctx, data_raw_pressure.u8bit);
 
-			pressure_hPa = lps22hh_from_lsb_to_hpa(data_raw_pressure.i32bit);
+			press_data_buffer.pressure = lps22hh_from_lsb_to_hpa(data_raw_pressure.i32bit);
 
 			lps22hh_temperature_raw_get(&pressure_ctx, data_raw_temperature.u8bit);
-			lps22hhTemperature_degC = lps22hh_from_lsb_to_celsius(data_raw_temperature.i16bit);
+			temp_data_buffer.temp = lps22hh_from_lsb_to_celsius(data_raw_temperature.i16bit);
 
-			Log_Debug("LPS22HH: Pressure     [hPa] : %.2f\r\n", pressure_hPa);
-			Log_Debug("LPS22HH: Temperature  [degC]: %.2f\r\n", lps22hhTemperature_degC);
+			Log_Debug("LPS22HH: Pressure     [hPa] : %.2f\r\n", press_data_buffer.pressure);
+			Log_Debug("LPS22HH: Temperature  [degC]: %.2f\r\n", temp_data_buffer.temp);
 		}
 	}
 	// LPS22HH was not detected
@@ -225,17 +228,11 @@ void AccelTimerEventHandler(EventLoopTimer *eventData)
 		firstPass = false;
 
 #endif 
-
+	return 0;
 }
 
-/// <summary>
-///     Initializes the I2C interface.
-/// </summary>
-/// <returns>0 on success, or -1 on failure</returns>
-int initI2c(EventLoop *eventLoop) {
-
+int initMaster() {
 	// Begin MT3620 I2C init 
-
 	i2cFd = I2CMaster_Open(AVNET_MT3620_SK_ISU2_I2C);
 	if (i2cFd < 0) {
 		Log_Debug("ERROR: I2CMaster_Open: errno=%d (%s)\n", errno, strerror(errno));
@@ -251,6 +248,16 @@ int initI2c(EventLoop *eventLoop) {
 	result = I2CMaster_SetTimeout(i2cFd, 100);
 	if (result != 0) {
 		Log_Debug("ERROR: I2CMaster_SetTimeout: errno=%d (%s)\n", errno, strerror(errno));
+		return -1;
+	}
+}
+
+/// <summary>
+///     Initializes the I2C interface.
+/// </summary>
+/// <returns>0 on success, or -1 on failure</returns>
+int initI2c(EventLoop *eventLoop) {
+	if(initMaster() != 0) {
 		return -1;
 	}
 
@@ -389,27 +396,16 @@ int initI2c(EventLoop *eventLoop) {
 			lsm6dso_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate.u8bit);
 
 			// Before we store the mdps values subtract the calibration data we captured at startup.
-			angular_rate_dps[0] = lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[0] - raw_angular_rate_calibration.i16bit[0]);
-			angular_rate_dps[1] = lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[1] - raw_angular_rate_calibration.i16bit[1]);
-			angular_rate_dps[2] = lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[2] - raw_angular_rate_calibration.i16bit[2]);
+			ang_data_buffer.x = lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[0] - raw_angular_rate_calibration.i16bit[0]);
+			ang_data_buffer.y = lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[1] - raw_angular_rate_calibration.i16bit[1]);
+			ang_data_buffer.z = lsm6dso_from_fs2000_to_mdps(data_raw_angular_rate.i16bit[2] - raw_angular_rate_calibration.i16bit[2]);
 
 		}
 
 	// If the angular values after applying the offset are not all 0.0s, then do it again!
-	} while ((angular_rate_dps[0] != 0.0) || (angular_rate_dps[1] != 0.0) || (angular_rate_dps[2] != 0.0));
+	} while ((ang_data_buffer.x != 0.0) || (ang_data_buffer.y != 0.0) || (ang_data_buffer.z != 0.0));
 
-	Log_Debug("LSM6DSO: Calibrating angular rate complete!\n");
-
-	// Init the epoll interface to periodically run the AccelTimerEventHandler routine where we read the sensors
-
-	// Define the period in the build_options.h file
-	struct timespec accelReadPeriod = { .tv_sec = ACCEL_READ_PERIOD_SECONDS,.tv_nsec = ACCEL_READ_PERIOD_NANO_SECONDS };
-	// event handler data structures. Only the event handler field needs to be populated.
-	accelTimer = CreateEventLoopPeriodicTimer(eventLoop, &AccelTimerEventHandler, &accelReadPeriod);
-	if (accelTimer == NULL) {
-		return ExitCode_Init_AccelleroMeterTimer;
-	}
-	
+	Log_Debug("LSM6DSO: Calibrating angular rate complete!\n");	
 	return 0;
 }
 
@@ -418,7 +414,6 @@ int initI2c(EventLoop *eventLoop) {
 /// </summary>
 void closeI2c(void) {
 	CloseFdAndPrintError(i2cFd, "i2c");
-	DisposeEventLoopTimer(accelTimer);
 }
 
 /// <summary>

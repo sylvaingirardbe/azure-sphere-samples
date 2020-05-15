@@ -16,7 +16,7 @@
 #include <applibs/gpio.h>
 
 #include <hw/avnet_mt3620_sk.h>
-#include "deviceTwin.h"
+#include "device_twin.h"
 #include "azure_io.h"
 #include "parson.h"
 #include "build_options.h"
@@ -140,7 +140,7 @@ void checkAndUpdateDeviceTwin(char* property, void* value, data_type_t type, boo
 ///		Parses received desired property changes.
 ///</summary>
 ///<param name="desiredProperties">Address of desired properties JSON_Object</param>
-void deviceTwinChangedHandler(JSON_Object * desiredProperties)
+int deviceTwinChangedHandler(JSON_Object * desiredProperties)
 {
 	int result = 0;
 
@@ -167,7 +167,7 @@ void deviceTwinChangedHandler(JSON_Object * desiredProperties)
 				if (result != 0) {
 					Log_Debug("Fd: %d\n", twinArray[i].twinFd);
 					Log_Debug("FAILURE: Could not set GPIO_%d, %d output value %d: %s (%d).\n", twinArray[i].twinGPIO, twinArray[i].twinFd, (GPIO_Value)*(bool*)twinArray[i].twinVar, strerror(errno), errno);
-					terminationRequired = true;
+					return result;
 				}
 				Log_Debug("Received device update. New %s is %s\n", twinArray[i].twinKey, *(bool*)twinArray[i].twinVar ? "true" : "false");
 				checkAndUpdateDeviceTwin(twinArray[i].twinKey, twinArray[i].twinVar, TYPE_BOOL, true);
@@ -203,7 +203,7 @@ void deviceTwinChangedHandler(JSON_Object * desiredProperties)
 				if (result != 0) {
 					Log_Debug("Fd: %d\n", twinArray[i].twinFd);
 					Log_Debug("FAILURE: Could not set GPIO_%d, %d output value %d: %s (%d).\n", twinArray[i].twinGPIO, twinArray[i].twinFd, (GPIO_Value)*(bool*)twinArray[i].twinVar, strerror(errno), errno);
-					terminationRequired = true;
+					return result;
 				}
 				Log_Debug("Received device update. New %s is %s\n", twinArray[i].twinKey, *(bool*)twinArray[i].twinVar ? "true" : "false");
 				checkAndUpdateDeviceTwin(twinArray[i].twinKey, twinArray[i].twinVar, TYPE_BOOL, true);

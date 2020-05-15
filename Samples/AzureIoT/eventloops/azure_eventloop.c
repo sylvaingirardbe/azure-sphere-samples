@@ -10,6 +10,7 @@
 
 #include "../exitcodes.h"
 #include "../azure_io.h"
+#include "../i2c.h"
 
 #include "azure_eventloop.h"
 
@@ -44,9 +45,31 @@ static void AzureTimerEventHandler(EventLoopTimer *timer)
 
     if (iothubAuthenticated)
     {
-        SendSimulatedTemperature();
+        SendTemperature();
         IoTHubDeviceClient_LL_DoWork(iothubClientHandle);
     }
+}
+
+static int SendPressure() {
+    press_data pressure = getPressData();
+    char pressureBuffer[20];
+    int len = snprintf(pressureBuffer, 20, "%3.2f", pressure.pressure);
+    if (len > 0) {
+        SendTelemetry("Pressure", pressureBuffer);
+    }
+
+    return 0;
+}
+
+static int SendTemperature() {
+    temp_data temperature = getTempData();
+    char tempBuffer[20];
+    int len = snprintf(tempBuffer, 20, "%3.2f", temperature.temp);
+    if (len > 0) {
+        SendTelemetry("Temperature", tempBuffer);
+    }
+
+    return 0;
 }
 
 /// <summary>

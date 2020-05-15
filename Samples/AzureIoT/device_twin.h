@@ -25,7 +25,7 @@ typedef struct {
 ///		Parses received desired property changes.
 ///</summary>
 ///<param name="desiredProperties">Address of desired properties JSON_Object</param>
-void deviceTwinChangedHandler(JSON_Object * desiredProperties);
+int deviceTwinChangedHandler(JSON_Object * desiredProperties);
 
 void checkAndUpdateDeviceTwin(char*, void*, data_type_t, bool);
 

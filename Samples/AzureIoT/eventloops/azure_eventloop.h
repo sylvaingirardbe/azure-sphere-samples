@@ -8,3 +8,4 @@ static void AzureTimerEventHandler(EventLoopTimer *timer);
 int initAzure(EventLoop *eventLoop);
 void closeAzure(void);
 static void SendSimulatedTemperature(void);
+static int SendTemperature();

@@ -39,15 +39,14 @@
 #include "eventloop_timer_utilities.h"
 
 #include "azure_io.h"
-#include "i2c.h"
 #include "exitcodes.h"
 #include "fd.h"
+#include "eventloops/i2c_eventloop.h"
 #include "eventloops/io_eventloop.h"
 #include "eventloops/azure_eventloop.h"
 #include "shared.h"
 
 volatile sig_atomic_t exitCode = ExitCode_Success;
-volatile sig_atomic_t terminationRequired = false;
 
 #include "parson.h" // used to parse Device Twin messages.
 
@@ -128,7 +127,7 @@ static ExitCode InitPeripheralsAndHandlers(void)
 
     eventLoop = EventLoop_Create();
     
-    if (initI2c(eventLoop) == -1) {
+    if (initI2cTimer(eventLoop) == -1) {
 		return -1;
 	}
 
@@ -153,7 +152,7 @@ static ExitCode InitPeripheralsAndHandlers(void)
 /// </summary>
 static void ClosePeripheralsAndHandlers(void) {
     EventLoop_Close(eventLoop);
-    closeI2c();
+    closeI2cTimer();
     closeIo();
     closeAzure();
 }
